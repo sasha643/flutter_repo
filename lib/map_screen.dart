@@ -125,6 +125,8 @@ class _MapScreenState extends State<MapScreen> {
             mapController!
                 .animateCamera(CameraUpdate.newLatLng(_currentPosition));
           }
+          _updateLocationOnServer(
+              _currentPosition.latitude, _currentPosition.longitude);
         });
       });
     } catch (e) {
@@ -157,6 +159,8 @@ class _MapScreenState extends State<MapScreen> {
       // Print the latitude and longitude when the marker is dragged
       print(
           'Dragged Position: ${newPosition.latitude}, ${newPosition.longitude}');
+      await _updateLocationOnServer(
+          newPosition.latitude, newPosition.longitude);
 
       setState(() {
         _currentAddress = address;
@@ -164,6 +168,63 @@ class _MapScreenState extends State<MapScreen> {
       });
     } catch (e) {
       print("Error getting current address: $e");
+    }
+  }
+
+  Future<void> _updateLocationOnServer(
+      double latitude, double longitude) async {
+    try {
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final custId = authProvider.customerId;
+      final vendorId = authProvider.vendorId;
+
+      if (custId == null && vendorId == null) {
+        print('No ID available. Unable to update location.');
+        return;
+      }
+
+      String url;
+      Map<String, dynamic> body;
+
+      if (authProvider.isVendor) {
+        if (vendorId == null) {
+          print('Vendor ID not available. Unable to update location.');
+          return;
+        }
+        url = 'http://127.0.0.1:8000/vend_location/';
+        body = {
+          'latitude': latitude,
+          'longitude': longitude,
+          'vendor_id': vendorId,
+        };
+      } else {
+        if (custId == null) {
+          print('Customer ID not available. Unable to update location.');
+          return;
+        }
+        url = 'http://127.0.0.1:8000/cust_location/';
+        body = {
+          'latitude': latitude,
+          'longitude': longitude,
+          'customer_id': custId,
+        };
+      }
+
+      final response = await http.post(
+        Uri.parse(url),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode(body),
+      );
+
+      if (response.statusCode != 200 && response.statusCode != 201) {
+        throw Exception('Failed to update location: ${response.body}');
+      }
+
+      print('Location updated on server: ($latitude, $longitude)');
+    } catch (error) {
+      print("Error updating location on server: $error");
     }
   }
 
